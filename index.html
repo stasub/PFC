@@ -36,6 +36,8 @@ button{font-family:inherit;cursor:pointer}button.sm{border:1px solid var(--line)
 .row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.row .n{font-size:12px;color:var(--sub)}
 .add{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:8px}.add input{font-size:15px;padding:8px 6px}.add .nm{grid-column:1/-1;text-align:left}.pc{color:var(--p)}.fc{color:var(--f)}.cc{color:var(--c)}
 .listGroup{margin-bottom:12px}.listHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.empty{padding:14px 0;text-align:center;color:var(--sub);font-size:13px}.legend{font-size:11px;color:var(--sub);margin-top:6px}.aiBox{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--bg)}.aiBox summary{cursor:pointer;font-size:13px;font-weight:700}.aiBox textarea{width:100%;min-height:76px;resize:vertical;margin-top:8px;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:14px/1.5 inherit}.aiActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.aiHint{font-size:11px;color:var(--sub);margin-top:6px}.aiPaste{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.qtyLine{display:flex;align-items:center;gap:6px;margin:7px 0 4px}.qtyLine label{font-size:11px;font-weight:700;color:var(--sub)}.qtyLine input{width:92px;font:700 15px inherit;padding:6px 8px;text-align:right;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.qtyLine .unit{font-size:12px;color:var(--sub)}
+.histSearch{width:100%;font:15px inherit;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:8px 0 6px}.mealBtns{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}.mealBtns button{padding:5px 9px;font-size:11px}.histFood{align-items:flex-start}.histFood .left{min-width:0;flex:1}.histFood .n{margin-top:3px}.hintStrong{font-size:12px;font-weight:700;color:var(--ink);margin-top:6px}
 @media(max-width:430px){.manualGrid{grid-template-columns:1fr repeat(3,.55fr)}.manualGrid button{grid-column:1/-1}.mealTotal{font-size:10px}.nav button{font-size:11px}}
 </style>
 </head>
@@ -45,7 +47,7 @@ button{font-family:inherit;cursor:pointer}button.sm{border:1px solid var(--line)
 <script>
 const MEALS=[["b","朝"],["l","昼"],["d","晩"],["s","間食"]];
 const K=["p","f","c"], KN={p:"P たんぱく質",f:"F 脂質",c:"C 炭水化物"}, KC={p:"var(--p)",f:"var(--f)",c:"var(--c)"}, KCAL={p:4,f:9,c:4};
-let S={t:{p:120,f:60,c:250},favs:[],days:{}}, tab="today", date=ymd(new Date()), txt={}, msg={}, aiTxt={}, aiPaste={};
+let S={t:{p:120,f:60,c:250},favs:[],days:{}}, tab="today", date=ymd(new Date()), txt={}, msg={}, aiTxt={}, aiPaste={}, histQ="", histCache=[];
 try{const r=localStorage.getItem("pfc-v2");if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 
 /* ざっくり推定用データ。100gあたり。値は目安で、厳密な栄養計算用ではありません。 */
@@ -89,12 +91,24 @@ function save(){try{localStorage.setItem("pfc-v2",JSON.stringify(S))}catch(e){}}
 function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function shift(n){const d=new Date(date+"T00:00:00");d.setDate(d.getDate()+n);date=ymd(d);render()}
 function label(s){const d=new Date(s+"T00:00:00");return (d.getMonth()+1)+"/"+d.getDate()+"（"+"日月火水木金土"[d.getDay()]+"）"}
-function items(m,s){s=s||date;const d=S.days[s]||(S.days[s]={});return d[m]||(d[m]=[])}
-function mt(m,s){const o={p:0,f:0,c:0};items(m,s).forEach(i=>K.forEach(k=>o[k]+=+i[k]||0));return o}
-function total(s){const o={p:0,f:0,c:0};MEALS.forEach(([m])=>{const v=mt(m,s);K.forEach(k=>o[k]+=v[k])});return o}
 const kcal=o=>Math.round(K.reduce((a,k)=>a+(+o[k]||0)*KCAL[k],0));
 const r1=n=>Math.round((+n||0)*10)/10;
+const r4=n=>Math.round((+n||0)*10000)/10000;
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function extractGrams(name){const m=String(name||"").match(/(\d+(?:\.\d+)?)\s*(?:g|ｇ|グラム)/i);return m?+m[1]:null}
+function replaceFirstGrams(name,g){const n=r1(g);const s=String(name||"");return /(\d+(?:\.\d+)?)\s*(?:g|ｇ|グラム)/i.test(s)?s.replace(/(\d+(?:\.\d+)?)\s*(?:g|ｇ|グラム)/i,n+"g"):(s.trim()+" "+n+"g").trim()}
+function hydrateItem(it){
+  if(!it||typeof it!=="object")return it;
+  let g=+it.grams||extractGrams(it.name);
+  if(g>0)it.grams=r1(g);
+  if(it.grams>0&&(!it.per100||typeof it.per100!=="object"))it.per100={p:r4((+it.p||0)*100/it.grams),f:r4((+it.f||0)*100/it.grams),c:r4((+it.c||0)*100/it.grams)};
+  return it;
+}
+function makeItem(name,p,f,c,src){return hydrateItem({name:String(name||"品目"),p:r1(Math.max(0,+p||0)),f:r1(Math.max(0,+f||0)),c:r1(Math.max(0,+c||0)),src:src||"指定"})}
+function cloneItem(it,src){it=hydrateItem({...it,per100:it&&it.per100?{...it.per100}:undefined});return {name:it.name,p:it.p,f:it.f,c:it.c,src:src||it.src||"履歴",grams:it.grams||undefined,per100:it.per100?{...it.per100}:undefined}}
+function items(m,s){s=s||date;const d=S.days[s]||(S.days[s]={});const arr=d[m]||(d[m]=[]);arr.forEach(hydrateItem);return arr}
+function mt(m,s){const o={p:0,f:0,c:0};items(m,s).forEach(i=>K.forEach(k=>o[k]+=+i[k]||0));return o}
+function total(s){const o={p:0,f:0,c:0};MEALS.forEach(([m])=>{const v=mt(m,s);K.forEach(k=>o[k]+=v[k])});return o}
 
 function parseExactPFC(t){
   const get=letter=>{const m=t.match(new RegExp(letter+"\\s*[:：]?\\s*(\\d+(?:\\.\\d+)?)","i"));return m?+m[1]:null};
@@ -132,34 +146,16 @@ function estimateFood(t){
 function addEstimate(m){
   const t=(txt[m]||"").trim();if(!t)return;
   const est=estimateFood(t);
-  if(est){items(m).push(est);msg[m]=est.src==="指定"?"入力されたPFCをそのまま記録したよ":"簡易データから推定したよ。必要なら数字を直してね"}
-  else{items(m).push({name:t,p:0,f:0,c:0,src:"要入力"});msg[m]="この食品は自動推定できなかったので、P/F/Cを入力してね"}
+  if(est){items(m).push(makeItem(est.name,est.p,est.f,est.c,est.src));msg[m]=est.src==="指定"?"入力されたPFCをそのまま記録したよ":"簡易データから推定したよ。必要なら数字を直してね"}
+  else{items(m).push(makeItem(t,0,0,0,"要入力"));msg[m]="この食品は自動推定できなかったので、P/F/Cを入力してね"}
   txt[m]="";save();render();
 }
-function splitFoods(t){
-  return String(t||"").replace(/\r/g,"").split(/\n|、|,|；|;/).map(x=>x.trim()).filter(Boolean);
-}
+function splitFoods(t){return String(t||"").replace(/\r/g,"").split(/\n|、|,|；|;/).map(x=>x.trim()).filter(Boolean)}
 function addBatchEstimate(m){
   const raw=(aiTxt[m]||"").trim();if(!raw)return;
   const parts=splitFoods(raw);let ok=0,unknown=0;
-  parts.forEach(t=>{const est=estimateFood(t);if(est){items(m).push(est);ok++}else{items(m).push({name:t,p:0,f:0,c:0,src:"要入力"});unknown++}});
+  parts.forEach(t=>{const est=estimateFood(t);if(est){items(m).push(makeItem(est.name,est.p,est.f,est.c,est.src));ok++}else{items(m).push(makeItem(t,0,0,0,"要入力"));unknown++}});
   aiTxt[m]="";save();msg[m]=unknown?`${parts.length}品目を追加。${unknown}品目はPFC要入力だよ`:`${ok}品目をまとめて追加したよ`;render();
-}
-function aiPromptText(m){
-  const meal=(MEALS.find(x=>x[0]===m)||[])[1]||"食事";
-  const raw=(aiTxt[m]||"").trim();
-  return `次の${meal}の食事を品目ごとに分け、各品目のPFCを推定してください。\n\n【食事】\n${raw}\n\nルール:\n- P=たんぱく質g、F=脂質g、C=炭水化物g\n- 商品名や量が分かる場合はそれを優先\n- 量が不明なら一般的な1人前で推定\n- 入力文にP/F/Cの数値が明記されている品目は、その数値を変更せず src を「指定」にする\n- それ以外は src を「AI推定」にする\n- 返答はJSON配列だけ。説明文やコードブロックは不要\n\n形式:\n[{"name":"鮭おにぎり 1個","p":5.0,"f":1.8,"c":39.0,"src":"AI推定"}]`;
-}
-async function copyAIPrompt(m,openChat=false){
-  const raw=(aiTxt[m]||"").trim();if(!raw){msg[m]="まず食べたものを書いてね";render();return}
-  const t=aiPromptText(m);let done=false;
-  try{await navigator.clipboard.writeText(t);done=true}catch(e){}
-  if(!done){
-    const ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
-    try{done=document.execCommand("copy")}catch(e){}ta.remove();
-  }
-  msg[m]=done?"ChatGPTに渡す文をコピーしたよ。ChatGPTで貼り付けて送ってね":"コピーできなかったので、入力文をChatGPTに送ってPFCをJSONで出してもらってね";render();
-  if(openChat&&done)setTimeout(()=>{location.href="https://chatgpt.com/"},120);
 }
 function parseAIArray(raw){
   raw=String(raw||"").trim();
@@ -169,58 +165,112 @@ function parseAIArray(raw){
   const r=JSON.parse(raw);
   return Array.isArray(r)?r:(r&&Array.isArray(r.items)?r.items:[]);
 }
+function macroFromLine(line,key){
+  const jp={p:"たんぱく質|タンパク質|蛋白質",f:"脂質",c:"炭水化物"}[key];
+  const letter=key.toUpperCase();
+  let m=String(line).match(new RegExp("(?:^|[\\s|｜/／,，])"+letter+"\\s*[:：=]?\\s*(\\d+(?:\\.\\d+)?)\\s*g?","i"));
+  if(!m)m=String(line).match(new RegExp("(?:"+jp+")\\s*[:：=]?\\s*(\\d+(?:\\.\\d+)?)\\s*g?","i"));
+  return m?+m[1]:null;
+}
+function cleanFoodName(line){
+  let s=String(line||"").trim().replace(/^[-*•・●○◯▶▷✓✔︎✅]+\s*/,"").replace(/^\d+[.)、]\s*/,"");
+  const idxs=[s.search(/(?:^|[\s|｜/／,，])P\s*[:：=]?\s*\d/i),s.search(/たんぱく質\s*[:：=]?\s*\d/),s.search(/タンパク質\s*[:：=]?\s*\d/),s.search(/蛋白質\s*[:：=]?\s*\d/) ].filter(x=>x>=0);
+  if(idxs.length)s=s.slice(0,Math.min(...idxs));
+  return s.replace(/[|｜:：\-–—／/,，\s]+$/g,"").trim();
+}
+function parseMarkdownPFC(raw){
+  const lines=String(raw||"").split(/\r?\n/);let hi=-1,map=null,out=[];
+  for(let i=0;i<lines.length;i++){
+    if(!lines[i].includes("|"))continue;
+    const cells=lines[i].split("|").map(x=>x.trim()).filter((x,j,a)=>!(j===0&&x==="")&&!(j===a.length-1&&x===""));
+    const low=cells.map(x=>x.replace(/[*_`]/g,"").toLowerCase());
+    const pi=low.findIndex(x=>/^(p|protein|たんぱく質|タンパク質)/i.test(x)),fi=low.findIndex(x=>/^(f|fat|脂質)/i.test(x)),ci=low.findIndex(x=>/^(c|carb|炭水化物)/i.test(x));
+    if(pi>=0&&fi>=0&&ci>=0){let ni=low.findIndex((x,j)=>j!==pi&&j!==fi&&j!==ci&&!/kcal|cal|カロリー/.test(x));if(ni<0)ni=0;hi=i;map={ni,pi,fi,ci};break}
+  }
+  if(hi<0)return out;
+  for(let i=hi+1;i<lines.length;i++){
+    const line=lines[i];if(!line.includes("|")){if(out.length)break;continue}
+    if(/^\s*\|?\s*:?-{2,}/.test(line))continue;
+    const cells=line.split("|").map(x=>x.trim()).filter((x,j,a)=>!(j===0&&x==="")&&!(j===a.length-1&&x===""));
+    if(cells.length<=Math.max(map.ni,map.pi,map.fi,map.ci))continue;
+    const name=cells[map.ni].replace(/[*_`]/g,"").trim();if(!name||/合計|total/i.test(name))continue;
+    const nums=[map.pi,map.fi,map.ci].map(j=>{const m=cells[j].match(/-?\d+(?:\.\d+)?/);return m?+m[0]:null});
+    if(nums.some(v=>v===null))continue;
+    out.push({name,p:nums[0],f:nums[1],c:nums[2],src:"AI推定"});
+  }
+  return out;
+}
+function parseChatGPTResponse(raw){
+  raw=String(raw||"").trim();if(!raw)return [];
+  try{const a=parseAIArray(raw);if(a.length)return a.map(x=>({name:String(x.name||"品目"),p:+x.p||0,f:+x.f||0,c:+x.c||0,src:x.src==="指定"?"指定":"AI推定"}))}catch(e){}
+  const table=parseMarkdownPFC(raw);if(table.length)return table;
+  const out=[];
+  String(raw).replace(/```[\s\S]*?```/g,m=>m.replace(/```(?:json)?|```/g,"")).split(/\r?\n/).forEach(line=>{
+    const plain=line.replace(/[*_`]/g,"");if(!plain.trim()||/合計|total|総計|全体/i.test(plain))return;
+    const p=macroFromLine(plain,"p"),f=macroFromLine(plain,"f"),c=macroFromLine(plain,"c");
+    if(p===null||f===null||c===null)return;
+    const name=cleanFoodName(plain);if(!name)return;
+    out.push({name,p,f,c,src:/指定|入力値|記載値/.test(plain)?"指定":"AI推定"});
+  });
+  return out;
+}
 function importAIText(m,raw){
   try{
-    const arr=parseAIArray(raw);if(!arr.length)throw 0;
-    let n=0;
-    arr.forEach(x=>{if(!x||!x.name)return;items(m).push({name:String(x.name),p:r1(Math.max(0,+x.p||0)),f:r1(Math.max(0,+x.f||0)),c:r1(Math.max(0,+x.c||0)),src:x.src==="指定"?"指定":"AI推定"});n++});
-    if(!n)throw 0;aiPaste[m]="";save();msg[m]=`${n}品目をAI結果から登録したよ`;render();return true;
-  }catch(e){msg[m]="AI結果を読み込めなかったよ。私の返答のJSON部分をコピーして、もう一度試してね";render();return false}
+    const arr=parseChatGPTResponse(raw);if(!arr.length)throw 0;
+    let n=0;arr.forEach(x=>{if(!x||!x.name)return;items(m).push(makeItem(x.name,x.p,x.f,x.c,x.src==="指定"?"指定":"AI推定"));n++});
+    if(!n)throw 0;aiPaste[m]="";save();msg[m]=`${n}品目をChatGPTの回答から登録したよ`;render();return true;
+  }catch(e){msg[m]="PFCを読み取れなかったよ。食品ごとに『食品名 P20 F5 C30』のような行が入った返答を貼ってみてね";render();return false}
 }
-function importAIResult(m){
-  const raw=(aiPaste[m]||"").trim();if(!raw)return;
-  importAIText(m,raw);
-}
-async function importClipboard(m){
-  try{
-    const raw=await navigator.clipboard.readText();
-    if(!raw.trim())throw 0;
-    importAIText(m,raw);
-  }catch(e){
-    msg[m]="クリップボードを読めなかったよ。下の欄に貼り付けて「AI結果を登録」を使ってね";render();
-  }
-}
+function importAIResult(m){const raw=(aiPaste[m]||"").trim();if(!raw)return;importAIText(m,raw)}
 function addManual(m){
   const g=id=>document.getElementById(id),n=(g("mn_"+m)?.value||"").trim();if(!n)return;
-  items(m).push({name:n,p:r1(+g("mp_"+m).value||0),f:r1(+g("mf_"+m).value||0),c:r1(+g("mc_"+m).value||0),src:"指定"});
+  items(m).push(makeItem(n,+g("mp_"+m).value||0,+g("mf_"+m).value||0,+g("mc_"+m).value||0,"指定"));
   save();msg[m]="指定値で追加したよ";render();
 }
-function edit(m,i,k,v){const it=items(m)[i];if(k==="name")it.name=v;else it[k]=Math.max(0,parseFloat(v)||0);it.src="指定";save();render()}
+function edit(m,i,k,v){
+  const it=hydrateItem(items(m)[i]);
+  if(k==="name"){
+    it.name=v;const g=extractGrams(v);if(g>0){it.grams=r1(g);it.per100={p:r4((+it.p||0)*100/g),f:r4((+it.f||0)*100/g),c:r4((+it.c||0)*100/g)}}
+  }else{
+    it[k]=Math.max(0,parseFloat(v)||0);if(it.grams>0){it.per100=it.per100||{};it.per100[k]=r4(it[k]*100/it.grams)}it.src="指定";
+  }
+  save();render();
+}
+function editGrams(m,i,v){
+  const it=hydrateItem(items(m)[i]),ng=Math.max(0,parseFloat(v)||0);if(!(ng>0))return;
+  const old=+it.grams||extractGrams(it.name);if(!(old>0))return;
+  if(!it.per100)it.per100={p:r4((+it.p||0)*100/old),f:r4((+it.f||0)*100/old),c:r4((+it.c||0)*100/old)};
+  it.grams=r1(ng);K.forEach(k=>it[k]=r1((+it.per100[k]||0)*ng/100));it.name=replaceFirstGrams(it.name,ng);save();render();
+}
 function del(m,i){items(m).splice(i,1);save();render()}
-function addFav(m,id){const f=S.favs.find(x=>x.id===id);if(!f)return;items(m).push({name:f.name,p:f.p,f:f.f,c:f.c,src:"指定"});save();render()}
-function starIt(m,i){const it=items(m)[i];if(!S.favs.some(f=>f.name===it.name))S.favs.push({id:Date.now(),name:it.name,p:it.p,f:it.f,c:it.c});save();msg[m]="★品目に登録したよ";render()}
+function addFav(m,id){const f=S.favs.find(x=>x.id===id);if(!f)return;items(m).push(makeItem(f.name,f.p,f.f,f.c,"指定"));save();render()}
+function starIt(m,i){const it=hydrateItem(items(m)[i]);if(!S.favs.some(f=>f.name===it.name))S.favs.push({id:Date.now(),name:it.name,p:it.p,f:it.f,c:it.c,grams:it.grams||undefined,per100:it.per100?{...it.per100}:undefined});save();msg[m]="★品目に登録したよ";render()}
 function addNewFav(){const g=id=>document.getElementById(id).value,n=g("fn").trim();if(!n)return;S.favs.push({id:Date.now(),name:n,p:+g("fp")||0,f:+g("ff")||0,c:+g("fc")||0});save();render()}
 function delFav(id){S.favs=S.favs.filter(x=>x.id!==id);save();render()}
 function setT(k,v){S.t[k]=Math.max(0,parseFloat(v)||0);save();render()}
 
+function historyKey(it){return String(it.name||"").toLowerCase().replace(/\d+(?:\.\d+)?\s*(?:g|ｇ|グラム)/ig,"#g").replace(/\s+/g,"")}
+function buildHistoryItems(limit=80){
+  const seen=new Set(),out=[];Object.keys(S.days).sort().reverse().forEach(d=>MEALS.forEach(([m,nm])=>(S.days[d]?.[m]||[]).slice().reverse().forEach(raw=>{
+    const it=hydrateItem(raw),key=historyKey(it);if(!key||seen.has(key)||out.length>=limit)return;seen.add(key);out.push({item:cloneItem(it,it.src),date:d,meal:m,mealName:nm});
+  })));
+  return out;
+}
+function addHistoryItem(idx,m){
+  const h=histCache[idx];if(!h)return;const today=ymd(new Date());items(m,today).push(cloneItem(h.item,"履歴"));save();date=today;tab="today";msg[m]="履歴から追加したよ。量(g)を変えるとPFCも自動で再計算するよ";render();scrollTo(0,0);
+}
 function cleanState(raw){
   const x=raw&&raw.data&&raw.app==="PFCノート"?raw.data:raw;
   if(!x||typeof x!=="object"||!x.t||!x.days)throw new Error("bad backup");
-  const out={t:{p:0,f:0,c:0},favs:[],days:{}};
-  K.forEach(k=>out.t[k]=Math.max(0,+x.t[k]||0));
-  if(Array.isArray(x.favs))out.favs=x.favs.map((f,i)=>({id:+f.id||Date.now()+i,name:String(f.name||"品目"),p:r1(Math.max(0,+f.p||0)),f:r1(Math.max(0,+f.f||0)),c:r1(Math.max(0,+f.c||0))}));
+  const out={t:{p:0,f:0,c:0},favs:[],days:{}};K.forEach(k=>out.t[k]=Math.max(0,+x.t[k]||0));
+  if(Array.isArray(x.favs))out.favs=x.favs.map((f,i)=>{const z={id:+f.id||Date.now()+i,name:String(f.name||"品目"),p:r1(Math.max(0,+f.p||0)),f:r1(Math.max(0,+f.f||0)),c:r1(Math.max(0,+f.c||0))};if(+f.grams>0)z.grams=r1(+f.grams);if(f.per100&&typeof f.per100==="object")z.per100={p:r4(+f.per100.p||0),f:r4(+f.per100.f||0),c:r4(+f.per100.c||0)};return z});
   if(x.days&&typeof x.days==="object")Object.entries(x.days).forEach(([d,day])=>{
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(d)||!day||typeof day!=="object")return;
-    out.days[d]={};
-    MEALS.forEach(([m])=>{
-      const arr=Array.isArray(day[m])?day[m]:[];
-      out.days[d][m]=arr.map(it=>({name:String(it?.name||"品目"),p:r1(Math.max(0,+it?.p||0)),f:r1(Math.max(0,+it?.f||0)),c:r1(Math.max(0,+it?.c||0)),src:String(it?.src||"指定")}));
-    });
-  });
-  return out;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!day||typeof day!=="object")return;out.days[d]={};
+    MEALS.forEach(([m])=>{const arr=Array.isArray(day[m])?day[m]:[];out.days[d][m]=arr.map(it=>{const z={name:String(it?.name||"品目"),p:r1(Math.max(0,+it?.p||0)),f:r1(Math.max(0,+it?.f||0)),c:r1(Math.max(0,+it?.c||0)),src:String(it?.src||"指定")};if(+it?.grams>0)z.grams=r1(+it.grams);if(it?.per100&&typeof it.per100==="object")z.per100={p:r4(+it.per100.p||0),f:r4(+it.per100.f||0),c:r4(+it.per100.c||0)};return hydrateItem(z)});});
+  });return out;
 }
 async function exportBackup(){
-  const payload={app:"PFCノート",version:1,exportedAt:new Date().toISOString(),data:S};
+  const payload={app:"PFCノート",version:2,exportedAt:new Date().toISOString(),data:S};
   const body=JSON.stringify(payload,null,2);
   const fn=`PFCノート_バックアップ_${ymd(new Date())}.json`;
   const file=new File([body],fn,{type:"application/json"});
@@ -254,15 +304,16 @@ function dateBar(){return `<div class="datebar"><button class="sm" onclick="shif
 function viewToday(){
   let h=dateBar()+`<div class="card" style="margin-top:10px"><h2>1日の合計</h2>${bars(total(date))}</div>`;
   MEALS.forEach(([m,nm])=>{const its=items(m),v=mt(m);h+=`<div class="card"><div class="mh"><h2>${nm}</h2><div class="mealTotal">${its.length?`${kcal(v)} kcal<br>P ${r1(v.p)} / F ${r1(v.f)} / C ${r1(v.c)}`:"未記録"}</div></div>`;
-    its.forEach((it,i)=>{h+=`<div class="it"><div class="itn"><input class="nm2" value="${esc(it.name)}" onchange="edit('${m}',${i},'name',this.value)"><span class="tag ${it.src==="推定"||it.src==="要入力"?"est":""}">${esc(it.src||"指定")}</span><button class="x" title="★品目に登録" onclick="starIt('${m}',${i})">★</button><button class="x" title="削除" onclick="del('${m}',${i})">✕</button></div><div class="grid">${K.map(k=>`<div class="fld"><label style="color:${KC[k]}">${k.toUpperCase()}</label><input type="number" inputmode="decimal" step="0.1" value="${r1(it[k])}" onchange="edit('${m}',${i},'${k}',this.value)"></div>`).join("")}</div></div>`});
-    h+=`<div class="inp"><input id="t_${m}" class="txt" placeholder="1品ずつ：鶏むね200g / 卵2個 / プロテイン P20 F2 C4" value="${esc(txt[m]||"")}" oninput="txt['${m}']=this.value" onkeydown="if(event.key==='Enter')addEstimate('${m}')"><button class="sm pri" onclick="addEstimate('${m}')">1品追加</button></div>`;
-    h+=`<details class="aiBox"><summary>✨ まとめ入力・ChatGPTで推定</summary><textarea id="ai_${m}" placeholder="例：セブンの鮭おにぎり1個、ゆで卵1個、無糖ヨーグルト100g" oninput="aiTxt['${m}']=this.value">${esc(aiTxt[m]||"")}</textarea><div class="aiActions"><button class="sm pri" onclick="addBatchEstimate('${m}')">このアプリで簡易推定</button><button class="sm" onclick="copyAIPrompt('${m}',true)">ChatGPTに聞く</button></div><div class="aiHint">ChatGPTに聞く → 返答のJSONをコピー → この画面に戻って「クリップボードから登録」でOK。</div><div class="aiPaste"><div class="aiActions"><button class="sm pri" onclick="importClipboard('${m}')">📋 クリップボードから登録</button></div><textarea id="aip_${m}" placeholder='うまく読めない時だけ、ChatGPTのJSON結果をここに貼り付け' oninput="aiPaste['${m}']=this.value">${esc(aiPaste[m]||"")}</textarea><div class="aiActions"><button class="sm" onclick="importAIResult('${m}')">貼り付け欄から登録</button></div></div></details>`;
+    its.forEach((it,i)=>{hydrateItem(it);h+=`<div class="it"><div class="itn"><input class="nm2" value="${esc(it.name)}" onchange="edit('${m}',${i},'name',this.value)"><span class="tag ${it.src==="推定"||it.src==="要入力"?"est":""}">${esc(it.src||"指定")}</span><button class="x" title="★品目に登録" onclick="starIt('${m}',${i})">★</button><button class="x" title="削除" onclick="del('${m}',${i})">✕</button></div>${it.grams>0?`<div class="qtyLine"><label>量</label><input type="number" inputmode="decimal" step="1" value="${r1(it.grams)}" onchange="editGrams('${m}',${i},this.value)"><span class="unit">g</span><span class="note">← ここだけ変えるとPFC再計算</span></div>`:""}<div class="grid">${K.map(k=>`<div class="fld"><label style="color:${KC[k]}">${k.toUpperCase()}</label><input type="number" inputmode="decimal" step="0.1" value="${r1(it[k])}" onchange="edit('${m}',${i},'${k}',this.value)"></div>`).join("")}</div></div>`});
+    h+=`<div class="inp"><input id="t_${m}" class="txt" placeholder="1品ずつ：鶏むね90g / 卵2個 / プロテイン P20 F2 C4" value="${esc(txt[m]||"")}" oninput="txt['${m}']=this.value" onkeydown="if(event.key==='Enter')addEstimate('${m}')"><button class="sm pri" onclick="addEstimate('${m}')">1品追加</button></div>`;
+    h+=`<details class="aiBox"><summary>🤖 ChatGPTの回答を貼り付け</summary><div class="hintStrong">ChatGPTの返答を丸ごと貼ってOK</div><div class="aiHint">食品ごとの「P / F / C」を自動で拾うよ。説明文や合計行が混じっていても、合計は登録しない。</div><textarea id="aip_${m}" placeholder="例：\n鶏むね肉 90g　P20.9 / F1.7 / C0\n食パン 60g　P5.3 / F2.5 / C27.9\n\n↑こんな返答をそのまま貼り付け" oninput="aiPaste['${m}']=this.value">${esc(aiPaste[m]||"")}</textarea><div class="aiActions"><button class="sm pri" onclick="importAIResult('${m}')">貼り付けた内容を登録</button></div></details>`;
+    h+=`<details class="manual"><summary>オフライン用：このアプリだけでまとめて簡易推定</summary><textarea class="txt" style="min-height:68px;margin-top:8px" placeholder="鶏むね90g、食パン60g など" oninput="aiTxt['${m}']=this.value">${esc(aiTxt[m]||"")}</textarea><div class="aiActions"><button class="sm" onclick="addBatchEstimate('${m}')">簡易推定して追加</button></div><div class="aiHint">対応している食品だけの簡易機能。分からない食品はPFC要入力になるよ。</div></details>`;
     h+=`<details class="manual"><summary>PFCを数字で指定して追加</summary><div class="manualGrid"><input id="mn_${m}" placeholder="品目名"><input id="mp_${m}" type="number" inputmode="decimal" placeholder="P"><input id="mf_${m}" type="number" inputmode="decimal" placeholder="F"><input id="mc_${m}" type="number" inputmode="decimal" placeholder="C"><button class="sm" onclick="addManual('${m}')">指定値で追加</button></div></details>`;
     if(msg[m])h+=`<div class="note" style="margin-top:7px">${esc(msg[m])}</div>`;
     if(S.favs.length)h+=`<div class="chips">${S.favs.map(f=>`<button class="chip" onclick="addFav('${m}',${f.id})">★ ${esc(f.name)}</button>`).join("")}</div>`;
     h+=`</div>`;
   });
-  return h+`<p class="note">簡易推定は目安。商品ラベルなど正確なPFCが分かる場合は「P20 F2 C4」のように書くか、指定入力を使ってね。ChatGPT連携はAPIキーをHTMLに保存せず、コピー＆貼り付け方式にしてあるよ。</p>`;
+  return h+`<p class="note">「90g」のようにグラム数が分かる品目は、記録後に量だけ変更するとPFCを比例計算するよ。P/F/Cを手で直した場合は、その修正値を基準に次の量変更を計算する。</p>`;
 }
 
 function viewList(){
@@ -275,7 +326,13 @@ function viewList(){
 
 function viewFavs(){let h=`<h1>よく使う品目</h1><div class="card">`;h+=S.favs.length?S.favs.map(f=>`<div class="row"><div><b>★ ${esc(f.name)}</b><div class="n">P${r1(f.p)} F${r1(f.f)} C${r1(f.c)} ／ ${kcal(f)}kcal</div></div><button class="sm" onclick="delFav(${f.id})">削除</button></div>`).join(""):`<div class="note">今日の記録で ★ を押すとここに登録できるよ。</div>`;h+=`<div class="add"><input class="nm" id="fn" placeholder="品目名（例：いつものプロテイン）"><input id="fp" type="number" inputmode="decimal" placeholder="P"><input id="ff" type="number" inputmode="decimal" placeholder="F"><input id="fc" type="number" inputmode="decimal" placeholder="C"><button class="sm pri" onclick="addNewFav()">登録</button></div></div>`;return h}
 
-function viewHist(){const ds=Object.keys(S.days).filter(d=>MEALS.some(([m])=>(S.days[d][m]||[]).length)).sort().reverse();let h=`<h1>過去の記録</h1><div class="card">`;h+=ds.length?ds.map(d=>{const t=total(d),cnt=MEALS.reduce((a,[m])=>a+(S.days[d][m]||[]).length,0);return `<div class="row" onclick="date='${d}';tab='list';render();scrollTo(0,0)" style="cursor:pointer"><div><b>${label(d)}</b><div class="n">${cnt}品目 ／ ${kcal(t)} kcal</div></div><div style="text-align:right;font-size:13px"><span class="pc">P ${r1(t.p)}</span>　<span class="fc">F ${r1(t.f)}</span>　<span class="cc">C ${r1(t.c)}</span></div></div>`}).join(""):`<div class="note">記録した日がここに並ぶよ。</div>`;return h+`</div>`}
+function viewHist(){
+  let h=`<h1>履歴</h1><div class="card"><h2>過去に食べた品目から追加</h2><div class="note">一度記録した食品を今日の朝・昼・晩・間食へ再利用できるよ。追加後、量(g)だけ変えればPFCも比例して再計算。</div><input id="histSearch" class="histSearch" placeholder="食品名を検索" value="${esc(histQ)}" oninput="histQ=this.value;render()">`;
+  const all=buildHistoryItems(100),q=histQ.trim().toLowerCase();histCache=(q?all.filter(x=>x.item.name.toLowerCase().includes(q)):all).slice(0,40);
+  if(histCache.length){histCache.forEach((x,i)=>{const it=hydrateItem(x.item);h+=`<div class="row histFood"><div class="left"><b>${esc(it.name)}</b><div class="n">最近：${label(x.date)} ${x.mealName} ／ P${r1(it.p)} F${r1(it.f)} C${r1(it.c)}${it.grams>0?` ／ ${r1(it.grams)}g`:""}</div></div><div class="mealBtns">${MEALS.map(([m,nm])=>`<button class="sm" onclick="addHistoryItem(${i},'${m}')">→${nm}</button>`).join("")}</div></div>`})}else h+=`<div class="empty">${q?"該当する品目がないよ":"まだ再利用できる品目がないよ"}</div>`;
+  h+=`</div>`;
+  const ds=Object.keys(S.days).filter(d=>MEALS.some(([m])=>(S.days[d][m]||[]).length)).sort().reverse();h+=`<div class="card"><h2>日ごとの記録</h2>`;h+=ds.length?ds.map(d=>{const t=total(d),cnt=MEALS.reduce((a,[m])=>a+(S.days[d][m]||[]).length,0);return `<div class="row" onclick="date='${d}';tab='list';render();scrollTo(0,0)" style="cursor:pointer"><div><b>${label(d)}</b><div class="n">${cnt}品目 ／ ${kcal(t)} kcal</div></div><div style="text-align:right;font-size:13px"><span class="pc">P ${r1(t.p)}</span>　<span class="fc">F ${r1(t.f)}</span>　<span class="cc">C ${r1(t.c)}</span></div></div>`}).join(""):`<div class="note">記録した日がここに並ぶよ。</div>`;return h+`</div>`;
+}
 
 function viewGoal(){let h=`<h1>1日の目標</h1><div class="card"><div class="grid">`;K.forEach(k=>h+=`<div class="fld"><label style="color:${KC[k]}">${KN[k]}</label><input type="number" inputmode="decimal" value="${S.t[k]}" onchange="setT('${k}',this.value)"></div>`);return h+`</div><div class="kcal">目標カロリー: ${kcal(S.t)} kcal</div></div><div class="card"><h2>バックアップ・復元</h2><p class="note">記録・目標・★品目をまとめてJSONファイルに保存できるよ。機種変更やブラウザデータ削除に備えて、ときどきバックアップ推奨。</p><div class="aiActions"><button class="sm pri" onclick="exportBackup()">⬇️ バックアップを書き出す</button><button class="sm" onclick="document.getElementById('restoreFile').click()">⬆️ バックアップから復元</button></div><input id="restoreFile" type="file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this.files[0])"><p class="note" style="margin-bottom:0">復元すると、この端末にある現在の記録はバックアップ内容で置き換わるよ。</p></div><div class="card"><h2>ホーム画面で使う</h2><p class="note">SafariでこのPFCノートを開き、共有 →「ホーム画面に追加」→「ウェブアプリとして開く」をオンにすると、アプリっぽく起動できるよ。</p></div><p class="note">記録はこの端末のブラウザ内に保存されるよ。ブラウザのデータを消すと記録も消えるので注意。</p>`}
 
@@ -286,7 +343,7 @@ function render(){
   document.getElementById("nav").innerHTML=[["today","記録"],["list","一覧"],["favs","★品目"],["hist","履歴"],["goal","目標"]].map(([k,n])=>`<button class="${tab===k?"on":""}" onclick="tab='${k}';render();scrollTo(0,0)">${n}</button>`).join("");
 }
 render();
-if("serviceWorker" in navigator && location.protocol.startsWith("http")){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{}));}
 </script>
 </body>
 </html>
