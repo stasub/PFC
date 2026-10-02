@@ -38,7 +38,8 @@ button{font-family:inherit;cursor:pointer}button.sm{border:1px solid var(--line)
 .listGroup{margin-bottom:12px}.listHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.empty{padding:14px 0;text-align:center;color:var(--sub);font-size:13px}.legend{font-size:11px;color:var(--sub);margin-top:6px}.aiBox{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--bg)}.aiBox summary{cursor:pointer;font-size:13px;font-weight:700}.aiBox textarea{width:100%;min-height:76px;resize:vertical;margin-top:8px;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:14px/1.5 inherit}.aiActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.aiHint{font-size:11px;color:var(--sub);margin-top:6px}.aiPaste{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .qtyLine{display:flex;align-items:center;gap:6px;margin:7px 0 4px}.qtyLine label{font-size:11px;font-weight:700;color:var(--sub)}.qtyLine input{width:92px;font:700 15px inherit;padding:6px 8px;text-align:right;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.qtyLine .unit{font-size:12px;color:var(--sub)}
 .histSearch{width:100%;font:15px inherit;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:8px 0 6px}.mealBtns{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}.mealBtns button{padding:5px 9px;font-size:11px}.histFood{align-items:flex-start}.histFood .left{min-width:0;flex:1}.histFood .n{margin-top:3px}.hintStrong{font-size:12px;font-weight:700;color:var(--ink);margin-top:6px}
-@media(max-width:430px){.manualGrid{grid-template-columns:1fr repeat(3,.55fr)}.manualGrid button{grid-column:1/-1}.mealTotal{font-size:10px}.nav button{font-size:11px}}
+.labelBox{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}.labelBox summary{font-size:12px;font-weight:700;cursor:pointer}.labelGrid{display:grid;grid-template-columns:1.3fr .8fr;gap:7px;margin-top:8px}.labelGrid .wide{grid-column:1/-1}.labelFld label{display:block;font-size:10px;font-weight:700;color:var(--sub);margin:0 0 2px}.labelFld input{width:100%;min-width:0;font:700 15px inherit;padding:8px;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.labelMacros{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;grid-column:1/-1}.calcPreview{grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:12px;color:var(--sub)}.calcPreview b{color:var(--ink)}
+@media(max-width:430px){.manualGrid{grid-template-columns:1fr repeat(3,.55fr)}.manualGrid button{grid-column:1/-1}.labelGrid{grid-template-columns:1fr 1fr}.mealTotal{font-size:10px}.nav button{font-size:11px}}
 </style>
 </head>
 <body>
@@ -222,6 +223,28 @@ function importAIText(m,raw){
   }catch(e){msg[m]="PFCを読み取れなかったよ。食品ごとに『食品名 P20 F5 C30』のような行が入った返答を貼ってみてね";render();return false}
 }
 function importAIResult(m){const raw=(aiPaste[m]||"").trim();if(!raw)return;importAIText(m,raw)}
+function readNum(id){const e=document.getElementById(id);return e&&e.value!==""?parseFloat(e.value):0}
+function labelCalcValues(m){
+  const base=readNum("lb_base_"+m),eat=readNum("lb_eat_"+m);
+  if(!(base>0)||!(eat>0))return null;
+  const scale=eat/base;
+  return {base,eat,p:r1(readNum("lb_p_"+m)*scale),f:r1(readNum("lb_f_"+m)*scale),c:r1(readNum("lb_c_"+m)*scale)};
+}
+function previewLabelCalc(m){
+  const box=document.getElementById("lb_prev_"+m);if(!box)return;
+  const v=labelCalcValues(m);
+  if(!v){box.innerHTML="基準量と食べた量を入れると、ここに食べた分のPFCが出るよ";return}
+  box.innerHTML=`食べた ${r1(v.eat)}g 分 → <b>P ${r1(v.p)} / F ${r1(v.f)} / C ${r1(v.c)}</b> ／ 約 ${kcal(v)} kcal`;
+}
+function addFromLabel(m){
+  const name=(document.getElementById("lb_name_"+m)?.value||"").trim(),v=labelCalcValues(m);
+  if(!name){msg[m]="品目名を入れてね";render();return}
+  if(!v){msg[m]="表示の基準量(g)と、実際に食べた量(g)を入れてね";render();return}
+  const per100={p:r4(readNum("lb_p_"+m)*100/v.base),f:r4(readNum("lb_f_"+m)*100/v.base),c:r4(readNum("lb_c_"+m)*100/v.base)};
+  const displayName=replaceFirstGrams(name,v.eat);
+  const it=makeItem(displayName,v.p,v.f,v.c,"表示値");it.grams=r1(v.eat);it.per100=per100;
+  items(m).push(it);save();msg[m]=`${r1(v.base)}gあたりの表示値から、食べた${r1(v.eat)}g分を計算して追加したよ`;render();
+}
 function addManual(m){
   const g=id=>document.getElementById(id),n=(g("mn_"+m)?.value||"").trim();if(!n)return;
   items(m).push(makeItem(n,+g("mp_"+m).value||0,+g("mf_"+m).value||0,+g("mc_"+m).value||0,"指定"));
@@ -308,12 +331,13 @@ function viewToday(){
     h+=`<div class="inp"><input id="t_${m}" class="txt" placeholder="1品ずつ：鶏むね90g / 卵2個 / プロテイン P20 F2 C4" value="${esc(txt[m]||"")}" oninput="txt['${m}']=this.value" onkeydown="if(event.key==='Enter')addEstimate('${m}')"><button class="sm pri" onclick="addEstimate('${m}')">1品追加</button></div>`;
     h+=`<details class="aiBox"><summary>🤖 ChatGPTの回答を貼り付け</summary><div class="hintStrong">ChatGPTの返答を丸ごと貼ってOK</div><div class="aiHint">食品ごとの「P / F / C」を自動で拾うよ。説明文や合計行が混じっていても、合計は登録しない。</div><textarea id="aip_${m}" placeholder="例：\n鶏むね肉 90g　P20.9 / F1.7 / C0\n食パン 60g　P5.3 / F2.5 / C27.9\n\n↑こんな返答をそのまま貼り付け" oninput="aiPaste['${m}']=this.value">${esc(aiPaste[m]||"")}</textarea><div class="aiActions"><button class="sm pri" onclick="importAIResult('${m}')">貼り付けた内容を登録</button></div></details>`;
     h+=`<details class="manual"><summary>オフライン用：このアプリだけでまとめて簡易推定</summary><textarea class="txt" style="min-height:68px;margin-top:8px" placeholder="鶏むね90g、食パン60g など" oninput="aiTxt['${m}']=this.value">${esc(aiTxt[m]||"")}</textarea><div class="aiActions"><button class="sm" onclick="addBatchEstimate('${m}')">簡易推定して追加</button></div><div class="aiHint">対応している食品だけの簡易機能。分からない食品はPFC要入力になるよ。</div></details>`;
-    h+=`<details class="manual"><summary>PFCを数字で指定して追加</summary><div class="manualGrid"><input id="mn_${m}" placeholder="品目名"><input id="mp_${m}" type="number" inputmode="decimal" placeholder="P"><input id="mf_${m}" type="number" inputmode="decimal" placeholder="F"><input id="mc_${m}" type="number" inputmode="decimal" placeholder="C"><button class="sm" onclick="addManual('${m}')">指定値で追加</button></div></details>`;
+    h+=`<details class="labelBox"><summary>🏷️ 栄養表示から食べた量ぶんを計算</summary><div class="aiHint">「100gあたり」「1食30gあたり」などの表示値をそのまま入力。食べた量に合わせて自動計算するよ。</div><div class="labelGrid"><div class="labelFld wide"><label>品目名</label><input id="lb_name_${m}" placeholder="例：グラノーラ"></div><div class="labelFld"><label>表示の基準量 (g)</label><input id="lb_base_${m}" type="number" inputmode="decimal" step="0.1" value="100" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label>実際に食べた量 (g)</label><input id="lb_eat_${m}" type="number" inputmode="decimal" step="0.1" placeholder="80" oninput="previewLabelCalc('${m}')"></div><div class="labelMacros"><div class="labelFld"><label style="color:var(--p)">基準量のP</label><input id="lb_p_${m}" type="number" inputmode="decimal" step="0.1" placeholder="P" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--f)">基準量のF</label><input id="lb_f_${m}" type="number" inputmode="decimal" step="0.1" placeholder="F" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--c)">基準量のC</label><input id="lb_c_${m}" type="number" inputmode="decimal" step="0.1" placeholder="C" oninput="previewLabelCalc('${m}')"></div></div><div id="lb_prev_${m}" class="calcPreview">基準量と食べた量を入れると、ここに食べた分のPFCが出るよ</div><div class="wide"><button class="sm pri" onclick="addFromLabel('${m}')">計算して追加</button></div></div></details>`;
+    h+=`<details class="manual"><summary>食べた量ぶんのPFCを直接入力</summary><div class="manualGrid"><input id="mn_${m}" placeholder="品目名"><input id="mp_${m}" type="number" inputmode="decimal" placeholder="P"><input id="mf_${m}" type="number" inputmode="decimal" placeholder="F"><input id="mc_${m}" type="number" inputmode="decimal" placeholder="C"><button class="sm" onclick="addManual('${m}')">指定値で追加</button></div><div class="aiHint">ここは、すでに「実際に食べた量ぶん」のPFCが分かっている時用。</div></details>`;
     if(msg[m])h+=`<div class="note" style="margin-top:7px">${esc(msg[m])}</div>`;
     if(S.favs.length)h+=`<div class="chips">${S.favs.map(f=>`<button class="chip" onclick="addFav('${m}',${f.id})">★ ${esc(f.name)}</button>`).join("")}</div>`;
     h+=`</div>`;
   });
-  return h+`<p class="note">「90g」のようにグラム数が分かる品目は、記録後に量だけ変更するとPFCを比例計算するよ。P/F/Cを手で直した場合は、その修正値を基準に次の量変更を計算する。</p>`;
+  return h+`<p class="note">栄養表示がある食品は「🏷️ 栄養表示から」で計算。表示がない食品はChatGPTの返答を貼り付け。一度記録した食品は履歴から再利用できるよ。「90g」のようにグラム数が分かる品目は、量だけ変えるとPFCを比例再計算する。</p>`;
 }
 
 function viewList(){
