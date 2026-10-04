@@ -38,13 +38,14 @@ button{font-family:inherit;cursor:pointer}button.sm{border:1px solid var(--line)
 .listGroup{margin-bottom:12px}.listHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.empty{padding:14px 0;text-align:center;color:var(--sub);font-size:13px}.legend{font-size:11px;color:var(--sub);margin-top:6px}.aiBox{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--bg)}.aiBox summary{cursor:pointer;font-size:13px;font-weight:700}.aiBox textarea{width:100%;min-height:76px;resize:vertical;margin-top:8px;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:14px/1.5 inherit}.aiActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.aiHint{font-size:11px;color:var(--sub);margin-top:6px}.aiPaste{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .qtyLine{display:flex;align-items:center;gap:6px;margin:7px 0 4px}.qtyLine label{font-size:11px;font-weight:700;color:var(--sub)}.qtyLine input{width:92px;font:700 15px inherit;padding:6px 8px;text-align:right;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.qtyLine .unit{font-size:12px;color:var(--sub)}
 .histSearch{width:100%;font:15px inherit;padding:9px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:8px 0 6px}.mealBtns{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}.mealBtns button{padding:5px 9px;font-size:11px}.histFood{align-items:flex-start}.histFood .left{min-width:0;flex:1}.histFood .n{margin-top:3px}.hintStrong{font-size:12px;font-weight:700;color:var(--ink);margin-top:6px}
-.labelBox{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}.labelBox summary{font-size:12px;font-weight:700;cursor:pointer}.labelGrid{display:grid;grid-template-columns:1.3fr .8fr;gap:7px;margin-top:8px}.labelGrid .wide{grid-column:1/-1}.labelFld label{display:block;font-size:10px;font-weight:700;color:var(--sub);margin:0 0 2px}.labelFld input{width:100%;min-width:0;font:700 15px inherit;padding:8px;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.labelMacros{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;grid-column:1/-1}.calcPreview{grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:12px;color:var(--sub)}.calcPreview b{color:var(--ink)}
+.labelBox{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}.labelBox summary{font-size:12px;font-weight:700;cursor:pointer}.labelGrid{display:grid;grid-template-columns:1.3fr .8fr;gap:7px;margin-top:8px}.labelGrid .wide{grid-column:1/-1}.labelFld label{display:block;font-size:10px;font-weight:700;color:var(--sub);margin:0 0 2px}.labelFld input{width:100%;min-width:0;font:700 15px inherit;padding:8px;border:1.5px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink)}.labelMacros{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;grid-column:1/-1}.calcPreview{grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:12px;color:var(--sub)}.calcPreview b{color:var(--ink)}.ocrBox{grid-column:1/-1;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg)}.ocrTop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ocrStatus{font-size:11px;color:var(--sub);margin-top:6px;white-space:pre-wrap}.ocrStatus.ok{color:var(--ok);font-weight:700}.ocrStatus.warn{color:var(--warn);font-weight:700}.ocrPreview{display:none;width:100%;max-height:180px;object-fit:contain;margin-top:8px;border-radius:9px;border:1px solid var(--line);background:var(--card)}.ocrRaw{margin-top:7px}.ocrRaw summary{font-size:11px;color:var(--sub);cursor:pointer}.ocrRaw pre{white-space:pre-wrap;word-break:break-word;max-height:150px;overflow:auto;font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px;margin:6px 0 0}
 @media(max-width:430px){.manualGrid{grid-template-columns:1fr repeat(3,.55fr)}.manualGrid button{grid-column:1/-1}.labelGrid{grid-template-columns:1fr 1fr}.mealTotal{font-size:10px}.nav button{font-size:11px}}
 </style>
 </head>
 <body>
 <main id="app"></main>
 <nav class="nav" id="nav"></nav>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 const MEALS=[["b","朝"],["l","昼"],["d","晩"],["s","間食"]];
 const K=["p","f","c"], KN={p:"P たんぱく質",f:"F 脂質",c:"C 炭水化物"}, KC={p:"var(--p)",f:"var(--f)",c:"var(--c)"}, KCAL={p:4,f:9,c:4};
@@ -224,6 +225,91 @@ function importAIText(m,raw){
 }
 function importAIResult(m){const raw=(aiPaste[m]||"").trim();if(!raw)return;importAIText(m,raw)}
 function readNum(id){const e=document.getElementById(id);return e&&e.value!==""?parseFloat(e.value):0}
+
+function setOCRStatus(m,text,kind){
+  const e=document.getElementById("ocr_status_"+m);if(!e)return;
+  e.textContent=text||"";e.className="ocrStatus"+(kind?" "+kind:"");
+}
+function setOCRRaw(m,text){
+  const e=document.getElementById("ocr_raw_"+m);if(e)e.textContent=text||"";
+}
+function setInputValue(id,v){
+  const e=document.getElementById(id);if(!e||v===null||v===undefined||v==="")return false;
+  e.value=r1(v);return true;
+}
+function nutritionNum(raw,names){
+  const compact=String(raw||"").replace(/[ \t　]/g,"").replace(/,/g,".");
+  for(const name of names){
+    const re=new RegExp(name+"[:：]?([0-9]+(?:\\.[0-9]+)?)\\s*(?:g|ｇ)?","i");
+    const m=compact.match(re);if(m)return +m[1];
+  }
+  return null;
+}
+function parseNutritionOCR(raw){
+  const compact=String(raw||"").replace(/[ \t　]/g,"").replace(/,/g,".");
+  const p=nutritionNum(raw,["たんぱく質","タンパク質","蛋白質","protein"]);
+  const f=nutritionNum(raw,["脂質","fat"]);
+  const c=nutritionNum(raw,["炭水化物","carbohydrate(?:s)?","carbs?"]);
+  let base=null;
+  const basePatterns=[
+    /(?:1食|1回|1包装|1袋|1個|1本|1枚|1パック)?[（(]?([0-9]+(?:\.[0-9]+)?)g[）)]?(?:当たり|あたり)/i,
+    /([0-9]+(?:\.[0-9]+)?)g(?:当たり|あたり)/i,
+    /(?:当たり|あたり)[（(]?([0-9]+(?:\.[0-9]+)?)g[）)]?/i
+  ];
+  for(const re of basePatterns){const m=compact.match(re);if(m){base=+m[1];break}}
+  return {base,p,f,c};
+}
+async function prepareOCRImage(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{const x=new Image();x.onload=()=>resolve(x);x.onerror=reject;x.src=url});
+    const maxW=1800,scale=Math.min(1.8,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
+    const cv=document.createElement("canvas");cv.width=w;cv.height=h;const ctx=cv.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(img,0,0,w,h);
+    const d=ctx.getImageData(0,0,w,h),a=d.data;
+    for(let i=0;i<a.length;i+=4){const g=.299*a[i]+.587*a[i+1]+.114*a[i+2];const v=Math.max(0,Math.min(255,(g-128)*1.35+128));a[i]=a[i+1]=a[i+2]=v}
+    ctx.putImageData(d,0,0);return cv.toDataURL("image/jpeg",.94);
+  }finally{URL.revokeObjectURL(url)}
+}
+async function readNutritionPhoto(m,file){
+  if(!file)return;
+  const prev=document.getElementById("ocr_preview_"+m);
+  if(prev){prev.src=URL.createObjectURL(file);prev.style.display="block";prev.onload=()=>{try{URL.revokeObjectURL(prev.src)}catch(e){}}}
+  if(!window.Tesseract){setOCRStatus(m,"OCR機能を読み込めなかったよ。ネット接続を確認して、ページを開き直してみてね。","warn");return}
+  const btn=document.getElementById("ocr_btn_"+m);if(btn)btn.disabled=true;
+  ["lb_base_","lb_p_","lb_f_","lb_c_"].forEach(x=>{const e=document.getElementById(x+m);if(e)e.value=""});
+  previewLabelCalc(m);
+  setOCRRaw(m,"");setOCRStatus(m,"写真を読み取る準備中… 初回はOCR用データの読み込みに少しかかるよ");
+  let worker=null;
+  try{
+    const img=await prepareOCRImage(file);
+    worker=await Tesseract.createWorker(["jpn","eng"],1,{logger:x=>{
+      if(!x||typeof x.progress!=="number")return;
+      const label=x.status==="recognizing text"?"文字を読み取り中":x.status==="loading language traineddata"?"日本語データを読み込み中":"OCR準備中";
+      setOCRStatus(m,`${label}… ${Math.round(x.progress*100)}%`);
+    }});
+    const ret=await worker.recognize(img,{rotateAuto:true});
+    const raw=ret?.data?.text||"";setOCRRaw(m,raw);
+    const v=parseNutritionOCR(raw);let found=0;
+    if(setInputValue("lb_base_"+m,v.base))found++;
+    if(setInputValue("lb_p_"+m,v.p))found++;
+    if(setInputValue("lb_f_"+m,v.f))found++;
+    if(setInputValue("lb_c_"+m,v.c))found++;
+    previewLabelCalc(m);
+    const missing=[];if(v.base===null)missing.push("基準量");if(v.p===null)missing.push("P");if(v.f===null)missing.push("F");if(v.c===null)missing.push("C");
+    if(found>=3){
+      setOCRStatus(m,`読み取ったよ ✓${missing.length?"　見つからなかった項目："+missing.join("・"):""}\n数字が合ってるか成分表示と見比べてから登録してね。`,missing.length?"warn":"ok");
+    }else{
+      setOCRStatus(m,"うまく数字を拾えなかったよ。表示部分を大きく、真上から、影が入らないように撮ると読みやすいよ。下の『OCRで読んだ文字』も確認できるよ。","warn");
+    }
+  }catch(e){
+    console.error(e);setOCRStatus(m,"写真の読み取りに失敗したよ。ネット接続を確認するか、写真を撮り直してみてね。","warn");
+  }finally{
+    if(worker)try{await worker.terminate()}catch(e){}
+    if(btn)btn.disabled=false;
+    const inp=document.getElementById("ocr_file_"+m);if(inp)inp.value="";
+  }
+}
 function labelCalcValues(m){
   const base=readNum("lb_base_"+m),eat=readNum("lb_eat_"+m);
   if(!(base>0)||!(eat>0))return null;
@@ -331,13 +417,13 @@ function viewToday(){
     h+=`<div class="inp"><input id="t_${m}" class="txt" placeholder="1品ずつ：鶏むね90g / 卵2個 / プロテイン P20 F2 C4" value="${esc(txt[m]||"")}" oninput="txt['${m}']=this.value" onkeydown="if(event.key==='Enter')addEstimate('${m}')"><button class="sm pri" onclick="addEstimate('${m}')">1品追加</button></div>`;
     h+=`<details class="aiBox"><summary>🤖 ChatGPTの回答を貼り付け</summary><div class="hintStrong">ChatGPTの返答を丸ごと貼ってOK</div><div class="aiHint">食品ごとの「P / F / C」を自動で拾うよ。説明文や合計行が混じっていても、合計は登録しない。</div><textarea id="aip_${m}" placeholder="例：\n鶏むね肉 90g　P20.9 / F1.7 / C0\n食パン 60g　P5.3 / F2.5 / C27.9\n\n↑こんな返答をそのまま貼り付け" oninput="aiPaste['${m}']=this.value">${esc(aiPaste[m]||"")}</textarea><div class="aiActions"><button class="sm pri" onclick="importAIResult('${m}')">貼り付けた内容を登録</button></div></details>`;
     h+=`<details class="manual"><summary>オフライン用：このアプリだけでまとめて簡易推定</summary><textarea class="txt" style="min-height:68px;margin-top:8px" placeholder="鶏むね90g、食パン60g など" oninput="aiTxt['${m}']=this.value">${esc(aiTxt[m]||"")}</textarea><div class="aiActions"><button class="sm" onclick="addBatchEstimate('${m}')">簡易推定して追加</button></div><div class="aiHint">対応している食品だけの簡易機能。分からない食品はPFC要入力になるよ。</div></details>`;
-    h+=`<details class="labelBox"><summary>🏷️ 栄養表示から食べた量ぶんを計算</summary><div class="aiHint">「100gあたり」「1食30gあたり」などの表示値をそのまま入力。食べた量に合わせて自動計算するよ。</div><div class="labelGrid"><div class="labelFld wide"><label>品目名</label><input id="lb_name_${m}" placeholder="例：グラノーラ"></div><div class="labelFld"><label>表示の基準量 (g)</label><input id="lb_base_${m}" type="number" inputmode="decimal" step="0.1" value="100" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label>実際に食べた量 (g)</label><input id="lb_eat_${m}" type="number" inputmode="decimal" step="0.1" placeholder="80" oninput="previewLabelCalc('${m}')"></div><div class="labelMacros"><div class="labelFld"><label style="color:var(--p)">基準量のP</label><input id="lb_p_${m}" type="number" inputmode="decimal" step="0.1" placeholder="P" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--f)">基準量のF</label><input id="lb_f_${m}" type="number" inputmode="decimal" step="0.1" placeholder="F" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--c)">基準量のC</label><input id="lb_c_${m}" type="number" inputmode="decimal" step="0.1" placeholder="C" oninput="previewLabelCalc('${m}')"></div></div><div id="lb_prev_${m}" class="calcPreview">基準量と食べた量を入れると、ここに食べた分のPFCが出るよ</div><div class="wide"><button class="sm pri" onclick="addFromLabel('${m}')">計算して追加</button></div></div></details>`;
+    h+=`<details class="labelBox"><summary>🏷️ 栄養表示から食べた量ぶんを計算</summary><div class="aiHint">写真から自動入力もできるよ。最後に成分表示と数字を見比べてから登録してね。</div><div class="labelGrid"><div class="ocrBox"><div class="ocrTop"><button id="ocr_btn_${m}" class="sm pri" onclick="document.getElementById('ocr_file_${m}').click()">📷 成分表示を撮影・選択</button><input id="ocr_file_${m}" type="file" accept="image/*" capture="environment" style="display:none" onchange="readNutritionPhoto('${m}',this.files[0])"><span class="note">P / F / C と「○gあたり」を自動入力</span></div><div id="ocr_status_${m}" class="ocrStatus">写真は端末内で文字認識するよ。画像そのものをAIサービスへ送信しない。</div><img id="ocr_preview_${m}" class="ocrPreview" alt="読み取り画像"><details class="ocrRaw"><summary>OCRで読んだ文字を確認</summary><pre id="ocr_raw_${m}"></pre></details></div><div class="labelFld wide"><label>品目名</label><input id="lb_name_${m}" placeholder="例：グラノーラ"></div><div class="labelFld"><label>表示の基準量 (g)</label><input id="lb_base_${m}" type="number" inputmode="decimal" step="0.1" value="100" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label>実際に食べた量 (g)</label><input id="lb_eat_${m}" type="number" inputmode="decimal" step="0.1" placeholder="80" oninput="previewLabelCalc('${m}')"></div><div class="labelMacros"><div class="labelFld"><label style="color:var(--p)">基準量のP</label><input id="lb_p_${m}" type="number" inputmode="decimal" step="0.1" placeholder="P" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--f)">基準量のF</label><input id="lb_f_${m}" type="number" inputmode="decimal" step="0.1" placeholder="F" oninput="previewLabelCalc('${m}')"></div><div class="labelFld"><label style="color:var(--c)">基準量のC</label><input id="lb_c_${m}" type="number" inputmode="decimal" step="0.1" placeholder="C" oninput="previewLabelCalc('${m}')"></div></div><div id="lb_prev_${m}" class="calcPreview">基準量と食べた量を入れると、ここに食べた分のPFCが出るよ</div><div class="wide"><button class="sm pri" onclick="addFromLabel('${m}')">計算して追加</button></div></div></details>`;
     h+=`<details class="manual"><summary>食べた量ぶんのPFCを直接入力</summary><div class="manualGrid"><input id="mn_${m}" placeholder="品目名"><input id="mp_${m}" type="number" inputmode="decimal" placeholder="P"><input id="mf_${m}" type="number" inputmode="decimal" placeholder="F"><input id="mc_${m}" type="number" inputmode="decimal" placeholder="C"><button class="sm" onclick="addManual('${m}')">指定値で追加</button></div><div class="aiHint">ここは、すでに「実際に食べた量ぶん」のPFCが分かっている時用。</div></details>`;
     if(msg[m])h+=`<div class="note" style="margin-top:7px">${esc(msg[m])}</div>`;
     if(S.favs.length)h+=`<div class="chips">${S.favs.map(f=>`<button class="chip" onclick="addFav('${m}',${f.id})">★ ${esc(f.name)}</button>`).join("")}</div>`;
     h+=`</div>`;
   });
-  return h+`<p class="note">栄養表示がある食品は「🏷️ 栄養表示から」で計算。表示がない食品はChatGPTの返答を貼り付け。一度記録した食品は履歴から再利用できるよ。「90g」のようにグラム数が分かる品目は、量だけ変えるとPFCを比例再計算する。</p>`;
+  return h+`<p class="note">栄養表示がある食品は「🏷️ 栄養表示から」で写真読み取り or 手入力。OCRは読み違いがあり得るので、登録前に数字を確認してね。表示がない食品はChatGPTの返答を貼り付け。一度記録した食品は履歴から再利用できるよ。「90g」のようにグラム数が分かる品目は、量だけ変えるとPFCを比例再計算する。</p>`;
 }
 
 function viewList(){
