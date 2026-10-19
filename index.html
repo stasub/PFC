@@ -284,11 +284,18 @@ function viewList(){
 
 function viewFavs(){let h=`<h1>よく使う品目</h1><div class="card">`;h+=S.favs.length?S.favs.map(f=>`<div class="row"><div><b>★ ${esc(f.name)}</b><div class="n">P${r1(f.p)} F${r1(f.f)} C${r1(f.c)} ／ ${kcal(f)}kcal</div></div><button class="sm" onclick="delFav(${f.id})">削除</button></div>`).join(""):`<div class="note">今日の記録で ★ を押すとここに登録できるよ。</div>`;h+=`<div class="add"><input class="nm" id="fn" placeholder="品目名（例：いつものプロテイン）"><input id="fp" type="number" inputmode="decimal" placeholder="P"><input id="ff" type="number" inputmode="decimal" placeholder="F"><input id="fc" type="number" inputmode="decimal" placeholder="C"><button class="sm pri" onclick="addNewFav()">登録</button></div></div>`;return h}
 
+function filterHistoryRows(){
+  const box=document.getElementById("histSearchResults");if(!box)return;
+  const q=String(histQ||"").trim().toLowerCase(),rows=[...box.querySelectorAll(".histFood")];let shown=0;
+  rows.forEach(row=>{const hit=(!q||String(row.dataset.name||"").includes(q))&&shown<40;row.style.display=hit?"":"none";if(hit)shown++});
+  const empty=document.getElementById("histEmpty");if(empty){empty.textContent=q?"該当する品目がないよ":"まだ再利用できる品目がないよ";empty.style.display=shown?"none":"block"}
+}
+
 function viewHist(){
-  let h=`<h1>履歴</h1><div class="card"><h2>過去に食べた品目から追加</h2><div class="note">一度記録した食品を今日の朝・昼・晩・間食へ再利用できるよ。追加後、量(g)だけ変えればPFCも比例して再計算。</div><input id="histSearch" class="histSearch" placeholder="食品名を検索" value="${esc(histQ)}" oninput="histQ=this.value;render()">`;
-  const all=buildHistoryItems(100),q=histQ.trim().toLowerCase();histCache=(q?all.filter(x=>x.item.name.toLowerCase().includes(q)):all).slice(0,40);
-  if(histCache.length){histCache.forEach((x,i)=>{const it=hydrateItem(x.item);h+=`<div class="row histFood"><div class="left"><b>${esc(it.name)}</b><div class="n">最近：${label(x.date)} ${x.mealName} ／ P${r1(it.p)} F${r1(it.f)} C${r1(it.c)}${it.grams>0?` ／ ${r1(it.grams)}g`:""}</div></div><div class="mealBtns">${MEALS.map(([m,nm])=>`<button class="sm" onclick="addHistoryItem(${i},'${m}')">→${nm}</button>`).join("")}</div></div>`})}else h+=`<div class="empty">${q?"該当する品目がないよ":"まだ再利用できる品目がないよ"}</div>`;
-  h+=`</div>`;
+  let h=`<h1>履歴</h1><div class="card"><h2>過去に食べた品目から追加</h2><div class="note">一度記録した食品を今日の朝・昼・晩・間食へ再利用できるよ。追加後、量(g)だけ変えればPFCも比例して再計算。</div><input id="histSearch" class="histSearch" placeholder="食品名を検索" value="${esc(histQ)}" oninput="histQ=this.value;filterHistoryRows()"><div id="histSearchResults">`;
+  histCache=buildHistoryItems(100);
+  histCache.forEach((x,i)=>{const it=hydrateItem(x.item);h+=`<div class="row histFood" data-name="${esc(String(it.name||"").toLowerCase())}"><div class="left"><b>${esc(it.name)}</b><div class="n">最近：${label(x.date)} ${x.mealName} ／ P${r1(it.p)} F${r1(it.f)} C${r1(it.c)}${it.grams>0?` ／ ${r1(it.grams)}g`:""}</div></div><div class="mealBtns">${MEALS.map(([m,nm])=>`<button class="sm" onclick="addHistoryItem(${i},'${m}')">→${nm}</button>`).join("")}</div></div>`});
+  h+=`<div class="empty" id="histEmpty" style="display:none"></div></div></div>`;
   const ds=Object.keys(S.days).filter(d=>MEALS.some(([m])=>(S.days[d][m]||[]).length)).sort().reverse();h+=`<div class="card"><h2>日ごとの記録</h2>`;h+=ds.length?ds.map(d=>{const t=total(d),cnt=MEALS.reduce((a,[m])=>a+(S.days[d][m]||[]).length,0);return `<div class="row" onclick="date='${d}';tab='list';render();scrollTo(0,0)" style="cursor:pointer"><div><b>${label(d)}</b><div class="n">${cnt}品目 ／ ${kcal(t)} kcal</div></div><div style="text-align:right;font-size:13px"><span class="pc">P ${r1(t.p)}</span>　<span class="fc">F ${r1(t.f)}</span>　<span class="cc">C ${r1(t.c)}</span></div></div>`}).join(""):`<div class="note">記録した日がここに並ぶよ。</div>`;return h+`</div>`;
 }
 
@@ -299,6 +306,7 @@ function render(){
   document.getElementById("app").innerHTML={today:viewToday,list:viewList,favs:viewFavs,hist:viewHist,goal:viewGoal}[tab]();
   if(id){const e=document.getElementById(id);if(e){e.focus();try{e.setSelectionRange(pos,pos)}catch(x){}}}
   document.getElementById("nav").innerHTML=[["today","記録"],["list","一覧"],["favs","★品目"],["hist","履歴"],["goal","目標"]].map(([k,n])=>`<button class="${tab===k?"on":""}" onclick="tab='${k}';render();scrollTo(0,0)">${n}</button>`).join("");
+  if(tab==="hist")filterHistoryRows();
 }
 render();
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{}));}
